@@ -1,0 +1,118 @@
+-- B. CREATE TABLES
+DROP TABLE IF EXISTS detailed_rentals;
+CREATE TABLE detailed_rentals(
+rental_id integer PRIMARY KEY,
+inventory_id integer,
+rental_date timestamp,
+customer_id integer,
+return_date timestamp,
+staff_id integer
+);
+
+-- This displays the currently empty table
+SELECT * FROM detailed_rentals;
+
+-- CREATION OF THE EMPTY MONTHLY SUMMARY TABLE
+DROP TABLE IF EXISTS monthly_summary_rentals;
+CREATE TABLE monthly_summary_rentals(
+month_year VARCHAR(7),
+total_rentals integer
+);
+
+-- C. DATA INSERTION FOR DETAILED_RENTALS TABLE
+INSERT INTO detailed_rentals(
+rental_id,
+inventory_id,
+rental_date,
+customer_id,
+return_date,
+staff_id
+)
+
+SELECT
+rental_id,
+inventory_id,
+rental_date,
+customer_id,
+return_date,
+staff_id
+
+FROM rental;
+
+-- This will show the now inserted data from the rental
+-- table inside of the detailed_rentals table
+SELECT * FROM detailed_rentals;
+
+-- D. FUNCTION CREATION
+-- Summary table update
+-- 1: Creates a function that will refresh monthly_summary_rentals table data
+CREATE OR REPLACE FUNCTION refresh_monthly_summary()
+RETURNS TRIGGER AS $$
+BEGIN
+-- 2: Refreshes the monthly_summary_rentals table with the data that is in detailed_rentals table
+DELETE FROM monthly_summary_rentals;
+INSERT INTO monthly_summary_rentals(month_year, total_rentals)
+SELECT
+TO_CHAR(DATE_TRUNC('month', rental_date), 'YYYY-MM') AS month_year,
+COUNT(*) AS total_rentals
+FROM detailed_rentals
+GROUP BY TO_CHAR(DATE_TRUNC('month', rental_date), 'YYYY-MM');
+RETURN NEW;
+END; $$
+LANGUAGE plpgsql;
+
+-- E. TRIGGER CREATION
+
+CREATE TRIGGER trigger_refresh_monthly_summary
+AFTER INSERT ON detailed_rentals
+FOR EACH STATEMENT
+EXECUTE FUNCTION refresh_monthly_summary();
+
+INSERT INTO detailed_rentals(rental_id, inventory_id, rental_date, customer_id, return_date, staff_id)
+VALUES (20000, 20000, '2023-12-01 10:00:00', 8000, '2023-12-05 10:00:00', 301)
+INSERT INTO detailed_rentals(rental_id, inventory_id, rental_date, customer_id, return_date, staff_id)
+VALUES (20002, 20001, '2023-12-03 10:00:00', 8003, '2023-12-05 10:00:30', 31)
+
+SELECT * FROM monthly_summary_rentals;
+
+-- F. PROCEDURE CREATION
+-- Procedure to refresh the detailed_rentals and monthly_summary_rentals tables
+CREATE OR REPLACE PROCEDURE table_refresh()
+LANGUAGE plpgsql
+AS $$
+BEGIN
+      DELETE FROM detailed_rentals;
+      DELETE FROM monthly_summary_rentals;
+      INSERT INTO detailed_rentals(
+            rental_id,
+            inventory_id,
+            rental_date,
+            customer_id,
+            return_date,
+            staff_id
+            )
+      SELECT
+            rental_id,
+            inventory_id,
+            rental_date,
+            customer_id,
+            return_date,
+            staff_id
+      FROM rental;
+      INSERT INTO monthly_summary_rentals(month_year, total_rentals)
+      SELECT
+      TO_CHAR(DATE_TRUNC('month', rental_date), 'YYYY-MM') AS month_year,
+      COUNT(*) AS total_rentals
+      FROM detailed_rentals
+      GROUP BY TO_CHAR(DATE_TRUNC('month', rental_date), 'YYYY-MM');
+      RETURN;
+END;
+$$;
+
+-- Procedure call
+CALL table_refresh();
+
+-- Get results
+
+SELECT * FROM detailed_rentals;
+SELECT * FROM monthly_summary_rentals;
